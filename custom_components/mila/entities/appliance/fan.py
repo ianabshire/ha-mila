@@ -36,7 +36,8 @@ class MilaApplianceFan(MilaFan):
     ):
         super().__init__(device, "Fan", "mdi:fan")      
         self._preset_modes = PRESET_MODES
-        self._supported_features = SUPPORT_SET_SPEED | SUPPORT_PRESET_MODE
+        self._current_mode = PRESET_MODE_AUTOMAGIC
+        self._supported_features = SUPPORT_SET_SPEED# | SUPPORT_PRESET_MODE
         self._speed_count = 10
         self._percentage_override: Optional[float] = None
 
@@ -56,24 +57,25 @@ class MilaApplianceFan(MilaFan):
         sensor = next((i for i in sensors if i["kind"] == ApplianceSensorKind.FanSpeed), None)
         return sensor["latest"]["value"] if sensor else None
 
-    @property
-    def current_mode(self) -> ApplianceMode:
-        return self.device.get_value("state.actualMode")
+    #@property
+    #def current_mode(self) -> ApplianceMode:
+    #    return self.device.get_value("state.actualMode")
 
     @property
     def is_on(self):
         """Return true if the entity is on."""
-        return self.speed is not None and self.speed > 0
+        #return self.speed is not None and self.speed > 0
+        return self._current_mode == PRESET_MODE_MANUAL
 
     @property
     def supported_features(self):
         """Flag supported features."""
         return self._supported_features
 
-    @property
-    def preset_modes(self) -> list:
-        """Get the list of available preset modes."""
-        return self._preset_modes
+    #@property
+    #def preset_modes(self) -> list:
+    #    """Get the list of available preset modes."""
+    #    return self._preset_modes
 
     @property
     def percentage(self):
@@ -91,48 +93,50 @@ class MilaApplianceFan(MilaFan):
         """Return the number of speeds of the fan supported."""
         return self._speed_count
 
-    @property
-    def preset_mode(self):
-        """Get the active preset mode."""
-        return PRESET_MODE_MANUAL if self.current_mode == ApplianceMode.Manual else PRESET_MODE_AUTOMAGIC
+    #@property
+    #def preset_mode(self):
+    #    """Get the active preset mode."""
+    #    return PRESET_MODE_MANUAL if self.current_mode == ApplianceMode.Manual else PRESET_MODE_AUTOMAGIC
 
     async def async_turn_on(
         self,
         speed: str = None,
         percentage: int = None,
-        preset_mode: str = None,
         **kwargs,
     ) -> None:
         """Turn the device on."""
         # If operation mode was set the device must not be turned on.
-        if percentage:
-            await self.async_set_percentage(percentage)
-        if preset_mode:
-            await self.async_set_preset_mode(preset_mode)
-        if percentage is None and preset_mode is None:
-            await self.async_set_preset_mode(PRESET_MODE_AUTOMAGIC)
+        #if percentage:
+        #    await self.async_set_percentage(percentage)
+        #if preset_mode:
+        #    await self.async_set_preset_mode(preset_mode)
+        #if percentage is None and preset_mode is None:
+        #    await self.async_set_preset_mode(PRESET_MODE_AUTOMAGIC)
+        await self.async_set_preset_mode_local(PRESET_MODE_MANUAL)
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the device off."""
-        await self.async_set_percentage(None)
+        #await self.async_set_percentage(None)
+        await self.async_set_preset_mode_local(PRESET_MODE_AUTOMAGIC)
 
     # TODO: Convert the pecentage back and forth from how Mila converts RPM to %. (It's uneven distribution of RPM ranges to Percentage)
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the percentage of the fan."""
         if self.preset_mode == PRESET_MODE_AUTOMAGIC:
-            await self.async_set_preset_mode(PRESET_MODE_MANUAL)
+            await self.async_set_preset_mode_local(PRESET_MODE_MANUAL)
         await self.device.set_fan_speed(percentage)
         await asyncio.sleep(1)
         self._percentage_override = percentage
 
-    async def async_set_preset_mode(self, preset_mode: str) -> None:
+    async def async_set_preset_mode_local(self, preset_mode: str) -> None:
         """Set the preset mode of the fan."""
-        if preset_mode not in self.preset_modes:
+        if preset_mode not in self._preset_modes:
             _LOGGER.warning("'%s'is not a valid preset mode", preset_mode)
             return
 
         _LOGGER.info(f"Setting the fan mode to {preset_mode} speed")
         await self.device.set_fan_mode(preset_mode)
+        self._current_mode = preset_mode
                 
         if preset_mode == PRESET_MODE_AUTOMAGIC:
             self._percentage_override = None
